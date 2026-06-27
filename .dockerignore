@@ -5,8 +5,6 @@ Dockerfile
 __pycache__
 *.pyc
 .env
-search.db
-search.db-*
 backups/
 index_snapshot.json
 data/
