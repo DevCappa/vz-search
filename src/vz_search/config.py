@@ -31,3 +31,4 @@ class Settings(BaseSettings):
     backup_dir: str = "backups"
     backup_keep: int = 5
     db_bootstrap_url: str = ""  # URL directa a search.db pre-indexado (Google Drive, etc.)
+    upload_token: str = ""  # Token para POST /ingest/database

@@ -72,3 +72,10 @@ class IngestStatusSchema(BaseModel):
 
 class ErrorSchema(BaseModel):
     detail: str
+
+
+class UploadDbResponseSchema(BaseModel):
+    records_total: int
+    db_path: str
+    bytes_received: int
+    message: str

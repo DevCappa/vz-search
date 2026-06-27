@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
 
 from vz_search.adapters.api.dependencies import get_container
 from vz_search.adapters.api.openapi import SEARCH_EXAMPLES
@@ -12,8 +12,10 @@ from vz_search.adapters.api.schemas import (
     IngestResponseSchema,
     IngestStatusSchema,
     SearchResponseSchema,
+    UploadDbResponseSchema,
 )
 from vz_search.bootstrap import Container
+from vz_search.domain.entities import SearchQuery
 from vz_search.infrastructure.ingestion.ai_ingestor import count_data_files
 
 router = APIRouter(prefix="/api/v1")
@@ -211,4 +213,54 @@ def ingest(
         pending=stats.pending,
         errors=list(stats.errors),
         message=mode_msg,
+    )
+
+
+@router.post(
+    "/ingest/database",
+    response_model=UploadDbResponseSchema,
+    tags=["ingestión"],
+    summary="Subir search.db indexado (Railway)",
+    description=(
+        "Sube el archivo `search.db` generado en tu PC con `python scripts/ingest.py`. "
+        "Requiere `token` igual a `VZ_SEARCH_UPLOAD_TOKEN` en Railway."
+    ),
+)
+async def upload_database(
+    token: str = Query(description="Token de seguridad (VZ_SEARCH_UPLOAD_TOKEN)"),
+    file: UploadFile = File(description="Archivo search.db"),
+    container: Container = Depends(get_container),
+) -> UploadDbResponseSchema:
+    if not container.settings.upload_token:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Configura VZ_SEARCH_UPLOAD_TOKEN en Railway antes de subir la BD",
+        )
+    if token != container.settings.upload_token:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token inválido")
+
+    if not file.filename or not file.filename.endswith(".db"):
+        raise HTTPException(status_code=400, detail="Sube un archivo .db")
+
+    db_path = Path(container.settings.db_path)
+    content = await file.read()
+    if len(content) < 1024:
+        raise HTTPException(status_code=400, detail="Archivo demasiado pequeño — ¿search.db vacío?")
+
+    for suffix in ("-wal", "-shm"):
+        extra = Path(str(db_path) + suffix)
+        if extra.exists():
+            extra.unlink()
+
+    db_path.parent.mkdir(parents=True, exist_ok=True)
+    db_path.write_bytes(content)
+
+    container.search_use_case._cache.clear()  # noqa: SLF001
+    total = container.record_repository.count()
+
+    return UploadDbResponseSchema(
+        records_total=total,
+        db_path=str(db_path),
+        bytes_received=len(content),
+        message=f"Base de datos cargada. {total} personas listas para buscar.",
     )
