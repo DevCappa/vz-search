@@ -1,13 +1,11 @@
 from __future__ import annotations
 
-import re
 from pathlib import Path
-
 import fitz
 
 from vz_search.domain.entities import ExtractedPerson
 from vz_search.infrastructure.ai.json_parser import read_docx_text, read_text_file, read_xlsx_text
-from vz_search.infrastructure.text_processing import split_into_records
+from vz_search.infrastructure.name_extraction import extract_persons_from_text
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
 
@@ -36,7 +34,9 @@ class LocalDocumentAnalyzer:
             if not text.strip():
                 return [], "No se pudo extraer texto (OCR/texto vacío)"
 
-            persons = self._text_to_persons(text, hospital_hint)
+            persons = extract_persons_from_text(text, hospital_hint)
+            if not persons:
+                return [], "No se identificaron nombres legibles en el documento"
             return persons, None
         except Exception as exc:  # noqa: BLE001
             return [], str(exc)
@@ -83,65 +83,3 @@ class LocalDocumentAnalyzer:
         doc.close()
         return "\n".join(parts)
 
-    @staticmethod
-    def _text_to_persons(text: str, hospital_hint: str | None) -> list[ExtractedPerson]:
-        chunks = split_into_records(text)
-        persons: list[ExtractedPerson] = []
-
-        for chunk in chunks:
-            name = LocalDocumentAnalyzer._guess_name(chunk)
-            if not name:
-                continue
-            persons.append(
-                ExtractedPerson(
-                    full_name=name,
-                    hospital=hospital_hint,
-                    notes=chunk[:500],
-                )
-            )
-        if persons:
-            return persons
-
-        return LocalDocumentAnalyzer._ocr_lines_to_persons(text, hospital_hint)
-
-    @staticmethod
-    def _ocr_lines_to_persons(text: str, hospital_hint: str | None) -> list[ExtractedPerson]:
-        """Fallback para fotos WhatsApp / listas manuscritas con OCR ruidoso."""
-        seen: set[str] = set()
-        persons: list[ExtractedPerson] = []
-
-        for raw_line in text.splitlines():
-            line = re.sub(r"\s+", " ", raw_line).strip()
-            if len(line) < 4 or line in seen:
-                continue
-            alpha = sum(c.isalpha() for c in line)
-            if alpha < 3 or alpha < len(line) * 0.35:
-                continue
-            if re.fullmatch(r"[\d\W_]+", line):
-                continue
-            seen.add(line)
-            persons.append(
-                ExtractedPerson(
-                    full_name=line[:80],
-                    hospital=hospital_hint,
-                    notes="Extraído por OCR — conviene revisar la imagen original",
-                )
-            )
-            if len(persons) >= 40:
-                break
-
-        return persons
-
-    @staticmethod
-    def _guess_name(chunk: str) -> str | None:
-        for line in chunk.split("|"):
-            line = line.strip()
-            if re.match(
-                r"^[A-ZÁÉÍÓÚÑ][a-záéíóúñ]+(?:\s+[A-ZÁÉÍÓÚÑa-záéíóúñ][a-záéíóúñ]+){1,4}$",
-                line,
-            ):
-                return line
-        words = chunk.split()
-        if len(words) >= 2 and words[0][0].isupper():
-            return " ".join(words[:4])[:80]
-        return None
