@@ -12,6 +12,7 @@ from vz_search.infrastructure.cache.ttl_memory_cache import TtlMemoryCache
 from vz_search.infrastructure.ingestion.ai_ingestor import AiIngestor
 from vz_search.infrastructure.ingestion.memory_text_ingestor import MemoryTextIngestor
 from vz_search.infrastructure.persistence.in_memory_record_repository import InMemoryRecordRepository
+from vz_search.infrastructure.persistence.db_bootstrap import bootstrap_database
 from vz_search.infrastructure.persistence.snapshot_migration import migrate_snapshot_to_sqlite
 from vz_search.infrastructure.persistence.sqlite_person_index import SqlitePersonIndex
 
@@ -41,6 +42,7 @@ def build_container(settings: Settings | None = None) -> Container:
             backup_dir=Path(settings.backup_dir),
             backup_keep=settings.backup_keep,
         )
+        bootstrap_database(Path(settings.db_path), settings.db_bootstrap_url)
         migrate_snapshot_to_sqlite(Path("index_snapshot.json"), person_index)
         repository: RecordRepository = person_index
 

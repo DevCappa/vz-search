@@ -62,6 +62,8 @@ class IngestStatusSchema(BaseModel):
     files_ok: int
     files_failed: int
     records_total: int
+    files_in_data_dir: int = 0
+    data_dir: str = "data"
     storage: str
     db_path: str
     backup_dir: str

@@ -11,6 +11,16 @@ from vz_search.infrastructure.text_processing import detect_state, guess_hospita
 SUPPORTED_SUFFIXES = {".pdf", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".txt", ".csv", ".md"}
 
 
+def count_data_files(data_dir: Path) -> int:
+    if not data_dir.exists():
+        return 0
+    return sum(
+        1
+        for path in data_dir.rglob("*")
+        if path.is_file() and path.suffix.lower() in SUPPORTED_SUFFIXES
+    )
+
+
 class AiIngestor:
     """
     Ingestión IA con persistencia SQLite.
@@ -48,6 +58,19 @@ class AiIngestor:
         errors: list[str] = []
 
         all_files = self._discover_files()
+        if not all_files:
+            return IngestStats(
+                files=0,
+                records=self._index.count(),
+                errors=(
+                    f"No hay archivos en '{self._data_dir}'. "
+                    "En Railway la carpeta data/ está vacía: indexa en tu PC y sube search.db "
+                    "(VZ_SEARCH_DB_BOOTSTRAP_URL) o incluye los PDFs en el deploy.",
+                ),
+                ai_calls=0,
+                skipped=0,
+                pending=0,
+            )
         pending = [
             path
             for path in all_files

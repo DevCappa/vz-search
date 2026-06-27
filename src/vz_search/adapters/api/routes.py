@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 
 from vz_search.adapters.api.dependencies import get_container
@@ -12,7 +14,7 @@ from vz_search.adapters.api.schemas import (
     SearchResponseSchema,
 )
 from vz_search.bootstrap import Container
-from vz_search.domain.entities import SearchQuery
+from vz_search.infrastructure.ingestion.ai_ingestor import count_data_files
 
 router = APIRouter(prefix="/api/v1")
 
@@ -132,11 +134,16 @@ def search(
     description="Muestra cuántos archivos van OK, cuántos fallaron y el total de personas en disco.",
 )
 def ingest_status(container: Container = Depends(get_container)) -> IngestStatusSchema:
+    data_dir = Path(container.settings.data_dir)
+    files_in_data = count_data_files(data_dir)
+
     if container.person_index is None:
         return IngestStatusSchema(
             files_ok=0,
             files_failed=0,
             records_total=container.record_repository.count(),
+            files_in_data_dir=files_in_data,
+            data_dir=str(data_dir),
             storage=container.storage_mode,
             db_path=container.settings.db_path,
             backup_dir=container.settings.backup_dir,
@@ -147,6 +154,8 @@ def ingest_status(container: Container = Depends(get_container)) -> IngestStatus
         files_ok=int(status["files_ok"]),
         files_failed=int(status["files_failed"]),
         records_total=int(status["records_total"]),
+        files_in_data_dir=files_in_data,
+        data_dir=str(data_dir),
         storage=container.storage_mode,
         db_path=container.settings.db_path,
         backup_dir=container.settings.backup_dir,
