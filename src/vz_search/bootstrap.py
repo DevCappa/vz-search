@@ -6,14 +6,9 @@ from pathlib import Path
 from vz_search.application.ingest_use_case import IngestUseCase
 from vz_search.application.search_use_case import SearchUseCase
 from vz_search.config import Settings
+from vz_search.domain.entities import IngestStats
 from vz_search.domain.ports.record_repository import RecordRepository
-from vz_search.infrastructure.ai.gemini_analyzer import GeminiDocumentAnalyzer
-from vz_search.infrastructure.ai.hybrid_analyzer import HybridDocumentAnalyzer
-from vz_search.infrastructure.ai.local_analyzer import LocalDocumentAnalyzer
-from vz_search.infrastructure.ai.ollama_analyzer import OllamaDocumentAnalyzer
 from vz_search.infrastructure.cache.ttl_memory_cache import TtlMemoryCache
-from vz_search.infrastructure.ingestion.ai_ingestor import AiIngestor
-from vz_search.infrastructure.ingestion.memory_text_ingestor import MemoryTextIngestor
 from vz_search.infrastructure.persistence.in_memory_record_repository import InMemoryRecordRepository
 from vz_search.infrastructure.persistence.db_bootstrap import bootstrap_database
 from vz_search.infrastructure.persistence.snapshot_migration import migrate_snapshot_to_sqlite
@@ -22,7 +17,31 @@ from vz_search.infrastructure.persistence.sqlite_person_index import SqlitePerso
 _MEMORY_STORE = InMemoryRecordRepository()
 
 
+class SearchOnlyIngestor:
+    """Railway/producción: solo búsqueda. Indexar en PC y subir search.db."""
+
+    def __init__(self, index: SqlitePersonIndex) -> None:
+        self._index = index
+
+    def ingest(self, *, full_rebuild: bool = False) -> IngestStats:
+        return IngestStats(
+            files=0,
+            records=self._index.count(),
+            errors=(
+                "Ingestión desactivada en servidor. "
+                "Indexa en tu PC (python scripts/ingest.py) y sube search.db "
+                "con PUT /api/v1/ingest/database?token=...",
+            ),
+            ai_calls=0,
+        )
+
+
 def _build_analyzer(settings: Settings):
+    from vz_search.infrastructure.ai.gemini_analyzer import GeminiDocumentAnalyzer
+    from vz_search.infrastructure.ai.hybrid_analyzer import HybridDocumentAnalyzer
+    from vz_search.infrastructure.ai.local_analyzer import LocalDocumentAnalyzer
+    from vz_search.infrastructure.ai.ollama_analyzer import OllamaDocumentAnalyzer
+
     local = LocalDocumentAnalyzer()
     provider = settings.ai_provider.lower()
 
@@ -45,7 +64,6 @@ def _build_analyzer(settings: Settings):
     if provider == "local":
         return local, "local"
 
-    # hybrid: gemini si hay key, si no ollama, si no local
     if settings.gemini_api_key:
         gemini = GeminiDocumentAnalyzer(
             api_key=settings.gemini_api_key,
@@ -90,6 +108,8 @@ def build_container(settings: Settings | None = None) -> Container:
         repository: RecordRepository = person_index
 
         if settings.ingest_mode == "ai":
+            from vz_search.infrastructure.ingestion.ai_ingestor import AiIngestor
+
             analyzer, ingest_mode = _build_analyzer(settings)
             ingestor = AiIngestor(
                 data_dir=data_dir,
@@ -99,10 +119,12 @@ def build_container(settings: Settings | None = None) -> Container:
                 incremental=settings.ingest_incremental,
             )
         else:
-            ingestor = MemoryTextIngestor(data_dir=data_dir, repository=_MEMORY_STORE)
-            ingest_mode = "text"
+            ingestor = SearchOnlyIngestor(person_index)
+            ingest_mode = "search-only"
         storage_mode = "sqlite"
     else:
+        from vz_search.infrastructure.ingestion.memory_text_ingestor import MemoryTextIngestor
+
         repository = _MEMORY_STORE
         ingestor = MemoryTextIngestor(data_dir=data_dir, repository=_MEMORY_STORE)
         ingest_mode = "text"

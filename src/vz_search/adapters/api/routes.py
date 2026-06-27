@@ -194,6 +194,12 @@ def ingest(
             detail="Configura VZ_SEARCH_GEMINI_API_KEY en .env (gratis en aistudio.google.com/apikey)",
         )
 
+    if container.ingest_mode == "search-only":
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Ingestión solo en PC local. Sube search.db con PUT /api/v1/ingest/database?token=...",
+        )
+
     stats = container.ingest_use_case.execute(full_rebuild=full)
     mode = "completa" if full else "incremental"
     mode_msg = (

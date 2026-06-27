@@ -23,7 +23,7 @@ class Settings(BaseSettings):
     ollama_model: str = "llama3.2-vision"
     ollama_host: str = "http://localhost:11434"
     max_pdf_pages: int = 5
-    ingest_mode: str = "ai"  # ai | text
+    ingest_mode: str = "ai"  # ai | text | search-only (Railway)
     auto_ingest_on_startup: bool = False
     ingest_incremental: bool = True
     ai_request_delay_seconds: float = 1.0
