@@ -27,6 +27,10 @@ class PersonRecordSchema(BaseModel):
     cedula: str | None = None
     content: str
     score: int | None = Field(default=None, description="Coincidencia difusa 0-100")
+    source_image_url: str | None = Field(
+        default=None,
+        description="URL para ver la imagen/PDF original (si está en data/ del servidor)",
+    )
 
 
 class SearchResponseSchema(BaseModel):

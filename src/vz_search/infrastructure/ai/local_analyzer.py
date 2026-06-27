@@ -99,6 +99,37 @@ class LocalDocumentAnalyzer:
                     notes=chunk[:500],
                 )
             )
+        if persons:
+            return persons
+
+        return LocalDocumentAnalyzer._ocr_lines_to_persons(text, hospital_hint)
+
+    @staticmethod
+    def _ocr_lines_to_persons(text: str, hospital_hint: str | None) -> list[ExtractedPerson]:
+        """Fallback para fotos WhatsApp / listas manuscritas con OCR ruidoso."""
+        seen: set[str] = set()
+        persons: list[ExtractedPerson] = []
+
+        for raw_line in text.splitlines():
+            line = re.sub(r"\s+", " ", raw_line).strip()
+            if len(line) < 4 or line in seen:
+                continue
+            alpha = sum(c.isalpha() for c in line)
+            if alpha < 3 or alpha < len(line) * 0.35:
+                continue
+            if re.fullmatch(r"[\d\W_]+", line):
+                continue
+            seen.add(line)
+            persons.append(
+                ExtractedPerson(
+                    full_name=line[:80],
+                    hospital=hospital_hint,
+                    notes="Extraído por OCR — conviene revisar la imagen original",
+                )
+            )
+            if len(persons) >= 40:
+                break
+
         return persons
 
     @staticmethod

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 from pathlib import Path
+from urllib.parse import quote
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from fastapi.responses import FileResponse
 
 from vz_search.adapters.api.dependencies import get_container
 from vz_search.adapters.api.openapi import SEARCH_EXAMPLES
@@ -19,6 +21,22 @@ from vz_search.domain.entities import SearchQuery
 from vz_search.infrastructure.ingestion.ai_ingestor import count_data_files
 
 router = APIRouter(prefix="/api/v1")
+
+
+def _safe_data_path(data_dir: Path, source: str) -> Path | None:
+    rel = source.replace("\\", "/").lstrip("/")
+    if not rel or ".." in Path(rel).parts:
+        return None
+    path = (data_dir / rel).resolve()
+    try:
+        path.relative_to(data_dir.resolve())
+    except ValueError:
+        return None
+    return path if path.is_file() else None
+
+
+def _source_image_url(source_file: str) -> str:
+    return f"/api/v1/files?source={quote(source_file, safe='')}"
 
 
 @router.get(
@@ -122,10 +140,35 @@ def search(
                 cedula=record.cedula,
                 content=record.content,
                 score=record.score,
+                source_image_url=_source_image_url(record.source_file),
             )
             for record in result.records
         ],
     )
+
+
+@router.get(
+    "/files",
+    tags=["búsqueda"],
+    summary="Ver imagen o documento original",
+    description=(
+        "Sirve el archivo fuente desde `./data/` (solo si existe en el servidor). "
+        "En Railway normalmente no está la carpeta data — indexa en PC y sube search.db."
+    ),
+    responses={
+        200: {"description": "Archivo binario (jpeg, pdf, etc.)"},
+        404: {"model": ErrorSchema, "description": "Archivo no disponible en este servidor"},
+    },
+)
+def get_source_file(
+    source: str = Query(description="Ruta relativa, ej. HOSPITAL PEREZ CARREÑO/foto.jpeg"),
+    container: Container = Depends(get_container),
+) -> FileResponse:
+    data_dir = Path(container.settings.data_dir)
+    path = _safe_data_path(data_dir, source)
+    if path is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Archivo no encontrado en data/")
+    return FileResponse(path)
 
 
 @router.get(

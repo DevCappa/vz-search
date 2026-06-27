@@ -8,6 +8,10 @@ from pathlib import Path
 from vz_search.domain.entities import ExtractedPerson, PersonRecord, SearchQuery
 from vz_search.infrastructure.text_processing import build_fts_query, rank_by_name
 
+
+def normalize_source_file(source_file: str) -> str:
+    return source_file.replace("\\", "/").lstrip("/")
+
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS records (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -154,6 +158,7 @@ class SqlitePersonIndex:
         default_hospital: str | None,
         default_state: str | None,
     ) -> int:
+        source_file = normalize_source_file(source_file)
         now = datetime.now(timezone.utc).isoformat()
         with self._connect() as conn:
             conn.execute("DELETE FROM records WHERE source_file = ?", (source_file,))
@@ -192,6 +197,7 @@ class SqlitePersonIndex:
         return len(extracted)
 
     def mark_file_failed(self, source_file: str, error: str) -> None:
+        source_file = normalize_source_file(source_file)
         now = datetime.now(timezone.utc).isoformat()
         with self._connect() as conn:
             conn.execute(
