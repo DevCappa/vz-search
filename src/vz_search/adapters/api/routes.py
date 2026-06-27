@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from fastapi import APIRouter, Depends, File, HTTPException, Query, Response, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 
 from vz_search.adapters.api.dependencies import get_container
 from vz_search.adapters.api.openapi import SEARCH_EXAMPLES
@@ -216,19 +216,20 @@ def ingest(
     )
 
 
-@router.post(
+@router.put(
     "/ingest/database",
     response_model=UploadDbResponseSchema,
     tags=["ingestión"],
     summary="Subir search.db indexado (Railway)",
     description=(
-        "Sube el archivo `search.db` generado en tu PC con `python scripts/ingest.py`. "
-        "Requiere `token` igual a `VZ_SEARCH_UPLOAD_TOKEN` en Railway."
+        "Sube search.db como cuerpo binario (application/octet-stream). "
+        "Requiere token = VZ_SEARCH_UPLOAD_TOKEN. "
+        "curl -X PUT 'URL?token=SECRET' --data-binary @search.db"
     ),
 )
 async def upload_database(
+    request: Request,
     token: str = Query(description="Token de seguridad (VZ_SEARCH_UPLOAD_TOKEN)"),
-    file: UploadFile = File(description="Archivo search.db"),
     container: Container = Depends(get_container),
 ) -> UploadDbResponseSchema:
     if not container.settings.upload_token:
@@ -239,11 +240,8 @@ async def upload_database(
     if token != container.settings.upload_token:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Token inválido")
 
-    if not file.filename or not file.filename.endswith(".db"):
-        raise HTTPException(status_code=400, detail="Sube un archivo .db")
-
     db_path = Path(container.settings.db_path)
-    content = await file.read()
+    content = await request.body()
     if len(content) < 1024:
         raise HTTPException(status_code=400, detail="Archivo demasiado pequeño — ¿search.db vacío?")
 
