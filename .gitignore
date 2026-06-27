@@ -1,0 +1,11 @@
+.venv/
+__pycache__/
+*.pyc
+.env
+index_snapshot.json
+search.db
+search.db-wal
+search.db-shm
+backups/
+data/
+

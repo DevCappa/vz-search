@@ -1,0 +1,14 @@
+Dockerfile
+.git
+.gitignore
+.venv
+__pycache__
+*.pyc
+.env
+search.db
+search.db-*
+backups/
+index_snapshot.json
+data/
+*.md
+!README.md
