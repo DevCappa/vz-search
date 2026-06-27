@@ -125,6 +125,8 @@ def rank_by_name(records: list[PersonRecord], name: str, limit: int) -> list[Per
                 source_file=source.source_file,
                 hospital=source.hospital,
                 state=source.state,
+                full_name=source.full_name,
+                cedula=source.cedula,
                 content=source.content,
                 score=int(score),
             )
