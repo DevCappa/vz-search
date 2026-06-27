@@ -74,3 +74,29 @@ def load_image_bytes(path: Path) -> list[bytes]:
 
 def read_text_file(path: Path) -> str:
     return path.read_text(encoding="utf-8", errors="ignore")
+
+
+def read_docx_text(path: Path) -> str:
+    import re
+    import zipfile
+
+    with zipfile.ZipFile(path) as archive:
+        xml_content = archive.read("word/document.xml").decode("utf-8", errors="ignore")
+    text = re.sub(r"<w:tab/>", "\t", xml_content)
+    text = re.sub(r"</w:p>", "\n", text)
+    text = re.sub(r"<[^>]+>", " ", text)
+    return re.sub(r"[ \t]+", " ", text).strip()
+
+
+def read_xlsx_text(path: Path) -> str:
+    from openpyxl import load_workbook
+
+    workbook = load_workbook(path, read_only=True, data_only=True)
+    rows: list[str] = []
+    for sheet in workbook.worksheets:
+        for row in sheet.iter_rows(values_only=True):
+            cells = [str(cell).strip() for cell in row if cell is not None and str(cell).strip()]
+            if cells:
+                rows.append(" | ".join(cells))
+    workbook.close()
+    return "\n".join(rows)

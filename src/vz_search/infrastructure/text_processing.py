@@ -52,9 +52,14 @@ def detect_state(text: str) -> str | None:
 
 
 def guess_hospital_from_path(path: Path, data_dir: Path) -> str:
-    parent = path.parent.name.replace("_", " ").replace("-", " ")
-    if path.parent != data_dir and path.parent.name.lower() != "data":
-        return parent
+    """Usa la primera carpeta bajo data/ como hospital (estructura descentralizada)."""
+    try:
+        rel = path.relative_to(data_dir)
+    except ValueError:
+        rel = path
+    parts = rel.parts
+    if len(parts) > 1:
+        return parts[0].replace("_", " ").replace("-", " ")
     return path.stem.replace("_", " ").replace("-", " ")
 
 

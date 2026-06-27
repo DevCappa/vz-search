@@ -12,12 +12,14 @@ from vz_search.infrastructure.ai.json_parser import (
     load_image_bytes,
     parse_persons_json,
     pdf_pages_as_png_bytes,
+    read_docx_text,
     read_text_file,
+    read_xlsx_text,
 )
 from vz_search.infrastructure.ai.prompts import EXTRACTION_PROMPT
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"}
-TEXT_SUFFIXES = {".txt", ".csv", ".md"}
+TEXT_SUFFIXES = {".txt", ".csv", ".md", ".docx", ".xlsx"}
 MAX_RETRIES = 5
 
 
@@ -77,7 +79,13 @@ class GeminiDocumentAnalyzer:
                 for raw in load_image_bytes(path):
                     parts.append(types.Part.from_bytes(data=raw, mime_type=mime))
             elif suffix in TEXT_SUFFIXES:
-                parts.append(types.Part.from_text(text=f"\n\nContenido del archivo:\n{read_text_file(path)}"))
+                if suffix == ".docx":
+                    content = read_docx_text(path)
+                elif suffix == ".xlsx":
+                    content = read_xlsx_text(path)
+                else:
+                    content = read_text_file(path)
+                parts.append(types.Part.from_text(text=f"\n\nContenido del archivo:\n{content}"))
             else:
                 return [], f"Formato no soportado: {suffix}"
 

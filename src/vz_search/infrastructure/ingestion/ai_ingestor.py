@@ -8,7 +8,10 @@ from vz_search.domain.ports.document_analyzer import DocumentAnalyzerPort
 from vz_search.infrastructure.persistence.sqlite_person_index import SqlitePersonIndex
 from vz_search.infrastructure.text_processing import detect_state, guess_hospital_from_path
 
-SUPPORTED_SUFFIXES = {".pdf", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".txt", ".csv", ".md"}
+SUPPORTED_SUFFIXES = {
+    ".pdf", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp",
+    ".txt", ".csv", ".md", ".docx", ".xlsx",
+}
 
 
 def count_data_files(data_dir: Path) -> int:
