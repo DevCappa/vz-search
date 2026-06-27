@@ -3,10 +3,10 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from vz_search.domain.entities import IngestStats
+from vz_search.domain.entities import ExtractedPerson, IngestStats
 from vz_search.domain.ports.document_analyzer import DocumentAnalyzerPort
+from vz_search.infrastructure.path_metadata import enrich_person_notes, extract_file_context
 from vz_search.infrastructure.persistence.sqlite_person_index import SqlitePersonIndex
-from vz_search.infrastructure.text_processing import detect_state, guess_hospital_from_path
 
 SUPPORTED_SUFFIXES = {
     ".pdf", ".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp",
@@ -92,32 +92,44 @@ class AiIngestor:
             if index > 0 and self._request_delay_seconds > 0:
                 time.sleep(self._request_delay_seconds)
 
-            hospital_hint = guess_hospital_from_path(path, self._data_dir)
-            state_hint = detect_state(hospital_hint) or detect_state(rel)
+            ctx = extract_file_context(path, self._data_dir)
 
             persons, error = self._analyzer.analyze_file(
                 path=path,
-                source_hint=rel,
-                hospital_hint=hospital_hint,
+                source_hint=ctx.source_file,
+                hospital_hint=ctx.hospital,
             )
             ai_calls += 1
 
             if error:
-                self._index.mark_file_failed(rel, error)
-                errors.append(f"{rel}: {error}")
+                self._index.mark_file_failed(ctx.source_file, error)
+                errors.append(f"{ctx.source_file}: {error}")
                 continue
 
             if not persons:
                 msg = "IA no encontró personas en el documento"
-                self._index.mark_file_failed(rel, msg)
-                errors.append(f"{rel}: {msg}")
+                self._index.mark_file_failed(ctx.source_file, msg)
+                errors.append(f"{ctx.source_file}: {msg}")
                 continue
 
+            enriched = [
+                ExtractedPerson(
+                    full_name=p.full_name,
+                    hospital=p.hospital or ctx.hospital,
+                    state=p.state or ctx.state,
+                    cedula=p.cedula,
+                    age=p.age,
+                    condition=p.condition,
+                    notes=enrich_person_notes(p.notes, ctx),
+                )
+                for p in persons
+            ]
+
             added = self._index.replace_file_records(
-                source_file=rel,
-                extracted=persons,
-                default_hospital=hospital_hint,
-                default_state=state_hint,
+                source_file=ctx.source_file,
+                extracted=enriched,
+                default_hospital=ctx.hospital,
+                default_state=ctx.state,
             )
             records_added += added
             files_processed += 1

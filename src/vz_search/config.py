@@ -16,14 +16,17 @@ class Settings(BaseSettings):
     cache_ttl_seconds: int = 300
     cache_max_size: int = 1024
 
-    # IA — una pasada al ingestar (Gemini gratis: https://aistudio.google.com/apikey)
+    # IA — proveedor: ollama (PC local) | gemini (nube) | local (OCR) | hybrid
+    ai_provider: str = "ollama"  # ollama | gemini | local | hybrid
     gemini_api_key: str = ""
     gemini_model: str = "gemini-2.5-flash-lite"
-    max_pdf_pages: int = 15
+    ollama_model: str = "llama3.2-vision"
+    ollama_host: str = "http://localhost:11434"
+    max_pdf_pages: int = 5
     ingest_mode: str = "ai"  # ai | text
     auto_ingest_on_startup: bool = False
     ingest_incremental: bool = True
-    ai_request_delay_seconds: float = 7.0
+    ai_request_delay_seconds: float = 1.0
 
     # Persistencia durable (recomendado para ~20MB de documentos)
     db_path: str = "search.db"

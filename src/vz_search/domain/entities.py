@@ -58,7 +58,12 @@ class ExtractedPerson:
     notes: str | None = None
 
     def to_content(self) -> str:
-        parts = [self.full_name]
+        parts: list[str] = []
+        if self.hospital:
+            parts.append(f"Hospital: {self.hospital}")
+        if self.state:
+            parts.append(f"Estado: {self.state}")
+        parts.append(self.full_name)
         if self.cedula:
             parts.append(f"Cédula: {self.cedula}")
         if self.age:
@@ -66,5 +71,5 @@ class ExtractedPerson:
         if self.condition:
             parts.append(f"Condición: {self.condition}")
         if self.notes:
-            parts.append(f"Notas: {self.notes}")
+            parts.append(self.notes)
         return " | ".join(parts)

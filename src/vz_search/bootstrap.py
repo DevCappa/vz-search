@@ -8,6 +8,9 @@ from vz_search.application.search_use_case import SearchUseCase
 from vz_search.config import Settings
 from vz_search.domain.ports.record_repository import RecordRepository
 from vz_search.infrastructure.ai.gemini_analyzer import GeminiDocumentAnalyzer
+from vz_search.infrastructure.ai.hybrid_analyzer import HybridDocumentAnalyzer
+from vz_search.infrastructure.ai.local_analyzer import LocalDocumentAnalyzer
+from vz_search.infrastructure.ai.ollama_analyzer import OllamaDocumentAnalyzer
 from vz_search.infrastructure.cache.ttl_memory_cache import TtlMemoryCache
 from vz_search.infrastructure.ingestion.ai_ingestor import AiIngestor
 from vz_search.infrastructure.ingestion.memory_text_ingestor import MemoryTextIngestor
@@ -17,6 +20,46 @@ from vz_search.infrastructure.persistence.snapshot_migration import migrate_snap
 from vz_search.infrastructure.persistence.sqlite_person_index import SqlitePersonIndex
 
 _MEMORY_STORE = InMemoryRecordRepository()
+
+
+def _build_analyzer(settings: Settings):
+    local = LocalDocumentAnalyzer()
+    provider = settings.ai_provider.lower()
+
+    if provider == "ollama":
+        ollama = OllamaDocumentAnalyzer(
+            model=settings.ollama_model,
+            host=settings.ollama_host,
+            max_pdf_pages=settings.max_pdf_pages,
+        )
+        return HybridDocumentAnalyzer(ollama, local), "ollama"
+
+    if provider == "gemini" and settings.gemini_api_key:
+        gemini = GeminiDocumentAnalyzer(
+            api_key=settings.gemini_api_key,
+            model=settings.gemini_model,
+            max_pdf_pages=settings.max_pdf_pages,
+        )
+        return HybridDocumentAnalyzer(gemini, local), "gemini"
+
+    if provider == "local":
+        return local, "local"
+
+    # hybrid: gemini si hay key, si no ollama, si no local
+    if settings.gemini_api_key:
+        gemini = GeminiDocumentAnalyzer(
+            api_key=settings.gemini_api_key,
+            model=settings.gemini_model,
+            max_pdf_pages=settings.max_pdf_pages,
+        )
+        return HybridDocumentAnalyzer(gemini, local), "gemini+local"
+
+    ollama = OllamaDocumentAnalyzer(
+        model=settings.ollama_model,
+        host=settings.ollama_host,
+        max_pdf_pages=settings.max_pdf_pages,
+    )
+    return HybridDocumentAnalyzer(ollama, local), "ollama+local"
 
 
 @dataclass
@@ -46,12 +89,8 @@ def build_container(settings: Settings | None = None) -> Container:
         migrate_snapshot_to_sqlite(Path("index_snapshot.json"), person_index)
         repository: RecordRepository = person_index
 
-        if settings.ingest_mode == "ai" and settings.gemini_api_key:
-            analyzer = GeminiDocumentAnalyzer(
-                api_key=settings.gemini_api_key,
-                model=settings.gemini_model,
-                max_pdf_pages=settings.max_pdf_pages,
-            )
+        if settings.ingest_mode == "ai":
+            analyzer, ingest_mode = _build_analyzer(settings)
             ingestor = AiIngestor(
                 data_dir=data_dir,
                 index=person_index,
@@ -59,7 +98,6 @@ def build_container(settings: Settings | None = None) -> Container:
                 request_delay_seconds=settings.ai_request_delay_seconds,
                 incremental=settings.ingest_incremental,
             )
-            ingest_mode = "ai"
         else:
             ingestor = MemoryTextIngestor(data_dir=data_dir, repository=_MEMORY_STORE)
             ingest_mode = "text"
