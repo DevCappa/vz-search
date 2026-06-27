@@ -37,15 +37,14 @@ class SearchOnlyIngestor:
 
 
 def _build_analyzer(settings: Settings):
-    from vz_search.infrastructure.ai.gemini_analyzer import GeminiDocumentAnalyzer
-    from vz_search.infrastructure.ai.hybrid_analyzer import HybridDocumentAnalyzer
-    from vz_search.infrastructure.ai.local_analyzer import LocalDocumentAnalyzer
-    from vz_search.infrastructure.ai.ollama_analyzer import OllamaDocumentAnalyzer
-
-    local = LocalDocumentAnalyzer()
     provider = settings.ai_provider.lower()
 
     if provider == "ollama":
+        from vz_search.infrastructure.ai.hybrid_analyzer import HybridDocumentAnalyzer
+        from vz_search.infrastructure.ai.local_analyzer import LocalDocumentAnalyzer
+        from vz_search.infrastructure.ai.ollama_analyzer import OllamaDocumentAnalyzer
+
+        local = LocalDocumentAnalyzer()
         ollama = OllamaDocumentAnalyzer(
             model=settings.ollama_model,
             host=settings.ollama_host,
@@ -54,6 +53,11 @@ def _build_analyzer(settings: Settings):
         return HybridDocumentAnalyzer(ollama, local), "ollama"
 
     if provider == "gemini" and settings.gemini_api_key:
+        from vz_search.infrastructure.ai.gemini_analyzer import GeminiDocumentAnalyzer
+        from vz_search.infrastructure.ai.hybrid_analyzer import HybridDocumentAnalyzer
+        from vz_search.infrastructure.ai.local_analyzer import LocalDocumentAnalyzer
+
+        local = LocalDocumentAnalyzer()
         gemini = GeminiDocumentAnalyzer(
             api_key=settings.gemini_api_key,
             model=settings.gemini_model,
@@ -62,9 +66,16 @@ def _build_analyzer(settings: Settings):
         return HybridDocumentAnalyzer(gemini, local), "gemini"
 
     if provider == "local":
-        return local, "local"
+        from vz_search.infrastructure.ai.local_analyzer import LocalDocumentAnalyzer
+
+        return LocalDocumentAnalyzer(), "local"
 
     if settings.gemini_api_key:
+        from vz_search.infrastructure.ai.gemini_analyzer import GeminiDocumentAnalyzer
+        from vz_search.infrastructure.ai.hybrid_analyzer import HybridDocumentAnalyzer
+        from vz_search.infrastructure.ai.local_analyzer import LocalDocumentAnalyzer
+
+        local = LocalDocumentAnalyzer()
         gemini = GeminiDocumentAnalyzer(
             api_key=settings.gemini_api_key,
             model=settings.gemini_model,
@@ -72,12 +83,26 @@ def _build_analyzer(settings: Settings):
         )
         return HybridDocumentAnalyzer(gemini, local), "gemini+local"
 
+    from vz_search.infrastructure.ai.hybrid_analyzer import HybridDocumentAnalyzer
+    from vz_search.infrastructure.ai.local_analyzer import LocalDocumentAnalyzer
+    from vz_search.infrastructure.ai.ollama_analyzer import OllamaDocumentAnalyzer
+
+    local = LocalDocumentAnalyzer()
     ollama = OllamaDocumentAnalyzer(
         model=settings.ollama_model,
         host=settings.ollama_host,
         max_pdf_pages=settings.max_pdf_pages,
     )
     return HybridDocumentAnalyzer(ollama, local), "ollama+local"
+
+
+def _resolve_ingest_mode(settings: Settings) -> str:
+    """Producción (Railway): solo búsqueda; indexar en PC y subir search.db."""
+    if settings.ingest_mode in ("search-only", "text"):
+        return settings.ingest_mode
+    if settings.env == "production":
+        return "search-only"
+    return settings.ingest_mode
 
 
 @dataclass
@@ -107,17 +132,22 @@ def build_container(settings: Settings | None = None) -> Container:
         migrate_snapshot_to_sqlite(Path("index_snapshot.json"), person_index)
         repository: RecordRepository = person_index
 
-        if settings.ingest_mode == "ai":
-            from vz_search.infrastructure.ingestion.ai_ingestor import AiIngestor
+        ingest_mode = _resolve_ingest_mode(settings)
+        if ingest_mode == "ai":
+            try:
+                from vz_search.infrastructure.ingestion.ai_ingestor import AiIngestor
 
-            analyzer, ingest_mode = _build_analyzer(settings)
-            ingestor = AiIngestor(
-                data_dir=data_dir,
-                index=person_index,
-                analyzer=analyzer,
-                request_delay_seconds=settings.ai_request_delay_seconds,
-                incremental=settings.ingest_incremental,
-            )
+                analyzer, ingest_mode = _build_analyzer(settings)
+                ingestor = AiIngestor(
+                    data_dir=data_dir,
+                    index=person_index,
+                    analyzer=analyzer,
+                    request_delay_seconds=settings.ai_request_delay_seconds,
+                    incremental=settings.ingest_incremental,
+                )
+            except ImportError:
+                ingestor = SearchOnlyIngestor(person_index)
+                ingest_mode = "search-only"
         else:
             ingestor = SearchOnlyIngestor(person_index)
             ingest_mode = "search-only"
