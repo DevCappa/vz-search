@@ -12,18 +12,29 @@ param(
 )
 
 if (-not (Test-Path $DbPath)) {
-    Write-Error "No existe $DbPath — ejecuta primero: python scripts\ingest.py"
+    Write-Error "No existe $DbPath. Ejecuta primero: python scripts\ingest.py"
     exit 1
 }
 
-$sizeMb = [math]::Round((Get-Item $DbPath).Length / 1MB, 2)
-Write-Host "Subiendo $DbPath ($sizeMb MB) a Railway..."
+$fileSize = (Get-Item $DbPath).Length
+$sizeMb = [math]::Round($fileSize / 1048576, 2)
+Write-Host "Subiendo $DbPath ($sizeMb megabytes) a Railway..."
 
-curl.exe -f -X PUT "$Url`?token=$Token" `
+$encodedToken = [uri]::EscapeDataString($Token)
+if ($Url.Contains('?')) {
+    $uploadUrl = "$Url" + '&token=' + $encodedToken
+} else {
+    $uploadUrl = "$Url" + '?token=' + $encodedToken
+}
+
+curl.exe -f -X PUT $uploadUrl `
     -H "Content-Type: application/octet-stream" `
     --data-binary "@$DbPath"
 
 if ($LASTEXITCODE -eq 0) {
-    $base = $Url -replace '/ingest/database', ''
-    Write-Host "`nListo. Prueba: $base/api/v1/search?q=Gonzalez"
+    $base = ($Url -split '/api/')[0]
+    $searchUrl = $base + '/api/v1/search?q=Gonzalez'
+    Write-Host ''
+    Write-Host 'Listo. Prueba busqueda en:'
+    Write-Host $searchUrl
 }
