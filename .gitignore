@@ -8,3 +8,4 @@ search.db-wal
 search.db-shm
 backups/
 
+data/
